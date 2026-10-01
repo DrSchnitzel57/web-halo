@@ -103,6 +103,9 @@ assert.match(shell, /!diagnosticsOverlay\.hidden \|\| onlineDialog\.open/,
 assert.match(shell,
   /platform_web_set_player_magnetism_enabled[\s\S]*enabled \? 1 : 0/,
   'the game setting must change Halo player_magnetism_flag through a native export');
+assert.match(shell,
+  /document\.addEventListener\("pointerdown"[\s\S]*?gameSettingsMenu\.open[\s\S]*?!gameSettingsMenu\.contains\(event\.target\)[\s\S]*?removeAttribute\("open"\)/,
+  'clicking outside the game-settings popover must dismiss it');
 
 const connectedGamepads = xinput.match(
   /static DWORD connected_gamepads\(void\)[\s\S]*?\n\}/);

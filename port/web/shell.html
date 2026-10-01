@@ -2347,6 +2347,11 @@
     ["keydown", "keyup", "keypress"].forEach(type => {
       gameSettingsMenu.addEventListener(type, event => event.stopPropagation());
     });
+    document.addEventListener("pointerdown", event => {
+      if (gameSettingsMenu.open && !gameSettingsMenu.contains(event.target)) {
+        gameSettingsMenu.removeAttribute("open");
+      }
+    });
 
     function formatBytes(value) {
       if (!Number.isFinite(value) || value < 0) return "Unavailable";
