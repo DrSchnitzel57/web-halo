@@ -1283,8 +1283,10 @@ short main_get_current_solo_level(
 boolean main_campaign_in_progress(
 	void)
 {
-	return game_in_progress() &&
-		!main_globals.main_menu_scenario_loaded &&
+	/* The browser may query presence after WebAssembly is instantiated but
+	 * before game_time_globals exists. Keep this accessor safe during that
+	 * startup window instead of calling game_in_progress(), which asserts. */
+	return !main_globals.main_menu_scenario_loaded &&
 		main_globals.connection == _game_connection_local &&
 		main_get_current_solo_level() != NONE;
 }

@@ -1685,6 +1685,7 @@
     const telemetryStartedAt = performance.now();
     let telemetryLastFlush = telemetryStartedAt;
     let runtimeStage = "page";
+    let haloRuntimeReady = false;
     let runtimeGpuClass = "unknown";
     let runtimeRole = "offline";
     let runtimeConnection = "unknown";
@@ -1728,7 +1729,7 @@
     function memoryBytes() {
       const js = performance.memory && Number.isFinite(performance.memory.usedJSHeapSize)
         ? performance.memory.usedJSHeapSize : 0;
-      const wasm = typeof Module !== "undefined" &&
+      const wasm = haloRuntimeReady && typeof Module !== "undefined" &&
         typeof Module._platform_web_profile_memory_bytes === "function"
         ? Module._platform_web_profile_memory_bytes()
         : (typeof Module !== "undefined" && Module.HEAPU8 && Module.HEAPU8.buffer
@@ -1742,6 +1743,7 @@
     }
 
     function moduleMetric(name, fallback = -1) {
+      if (!haloRuntimeReady) return fallback;
       const fn = typeof Module !== "undefined" && Module[name];
       if (typeof fn !== "function") return fallback;
       try {
@@ -2580,6 +2582,10 @@
       const poll = now => {
         presentationFrameRequest = 0;
         if (gamePresented || token !== presentationWaitToken) return;
+        if (!haloRuntimeReady) {
+          presentationFrameRequest = window.requestAnimationFrame(poll);
+          return;
+        }
         const loops = typeof Module !== "undefined" && Module._platform_web_profile_loops;
         const swaps = typeof Module !== "undefined" && Module._platform_web_profile_swaps;
         if (typeof loops !== "function" || typeof swaps !== "function") {
@@ -2688,6 +2694,7 @@
           : "Starting Halo…");
       },
       onRuntimeInitialized() {
+        haloRuntimeReady = true;
         runtimeStage = "runtime-initialized";
         sendRuntimeTelemetry("runtime_initialized", runtimeStage);
         applyMute();
