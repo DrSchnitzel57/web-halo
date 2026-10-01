@@ -21,6 +21,14 @@
   var PLAYER_NAME_MAXIMUM_LENGTH = 11;
   var LAST_MAP_INDEX = 12;
   var LAST_MODE_INDEX = 5;
+  var ADVANCED_MODE_DEFAULTS = Object.freeze([
+    { scoreToWin: 15, respawnSeconds: 0 },
+    { scoreToWin: 50, respawnSeconds: 10 },
+    { scoreToWin: 3, respawnSeconds: 10 },
+    { scoreToWin: 2, respawnSeconds: 5 },
+    { scoreToWin: 2, respawnSeconds: 5 },
+    { scoreToWin: 3, respawnSeconds: 0 },
+  ]);
   var PLAYER_STYLES = Object.freeze([
     "white", "black", "red", "blue", "sage", "yellow", "lime", "pink", "purple",
     "cyan", "cornflower", "orange", "teal", "forest", "brown", "tan", "maroon", "rose",
@@ -153,6 +161,16 @@
     elements.mode = byId("online-mode");
     elements.mapOptions = byId("online-map-options");
     elements.modeOptions = byId("online-mode-options");
+    elements.advancedEnabled = byId("online-advanced-enabled");
+    elements.advancedFields = byId("online-advanced-fields");
+    elements.scoreToWin = byId("online-score-to-win");
+    elements.respawnSeconds = byId("online-respawn-seconds");
+    elements.lives = byId("online-lives");
+    elements.healthPercent = byId("online-health-percent");
+    elements.infiniteGrenades = byId("online-infinite-grenades");
+    elements.shields = byId("online-shields");
+    elements.invisiblePlayers = byId("online-invisible-players");
+    elements.otherPlayersOnRadar = byId("online-other-players-on-radar");
     elements.joinForm = byId("online-join-form");
     elements.code = byId("online-code");
     elements.join = byId("online-join");
@@ -516,6 +534,7 @@
     elements.code.disabled = !!busy;
     if (elements.mapNext) elements.mapNext.disabled = !!busy;
     if (elements.modeBack) elements.modeBack.disabled = !!busy;
+    syncAdvancedSettingsState(!!busy);
     syncVerificationButtons();
     setProfileLocked(!!busy || session.active);
   }
@@ -550,16 +569,18 @@
     syncPickerCards(elements.modeOptions, "halo-mode-choice", elements.mode);
   }
 
-  function attachPickerEvents(container, name, select) {
+  function attachPickerEvents(container, name, select, onChange) {
     if (!container || !select) return;
     container.addEventListener("change", function(event) {
       var input = event.target;
       if (!input || input.name !== name || input.disabled) return;
       select.value = input.value;
       syncPickerCards(container, name, select);
+      if (onChange) onChange();
     });
     select.addEventListener("change", function() {
       syncPickerCards(container, name, select);
+      if (onChange) onChange();
     });
   }
 
@@ -813,6 +834,88 @@
     return option ? option.textContent.trim() : "";
   }
 
+  function integerSetting(value, minimum, maximum, label) {
+    var parsed = Number(value);
+    if (!Number.isInteger(parsed) || parsed < minimum || parsed > maximum) {
+      throw new Error(label + " must be between " + minimum + " and " + maximum + ".");
+    }
+    return parsed;
+  }
+
+  function advancedDefaults(modeIndex) {
+    var preset = ADVANCED_MODE_DEFAULTS[modeIndex] || ADVANCED_MODE_DEFAULTS[0];
+    return {
+      scoreToWin: preset.scoreToWin,
+      respawnSeconds: preset.respawnSeconds,
+      lives: 0,
+      healthPercent: 100,
+      infiniteGrenades: false,
+      shields: true,
+      invisiblePlayers: false,
+      otherPlayersOnRadar: true,
+    };
+  }
+
+  function normalizeAdvancedSettings(value, modeIndex) {
+    if (!value) return null;
+    var defaults = advancedDefaults(modeIndex);
+    return {
+      scoreToWin: integerSetting(value.scoreToWin, 1, 1000, "Score to win"),
+      respawnSeconds: integerSetting(value.respawnSeconds, 0, 30, "Respawn delay"),
+      lives: integerSetting(value.lives, 0, 99, "Lives"),
+      healthPercent: integerSetting(value.healthPercent, 25, 400, "Health"),
+      infiniteGrenades: value.infiniteGrenades === undefined ?
+        defaults.infiniteGrenades : !!value.infiniteGrenades,
+      shields: value.shields === undefined ? defaults.shields : !!value.shields,
+      invisiblePlayers: value.invisiblePlayers === undefined ?
+        defaults.invisiblePlayers : !!value.invisiblePlayers,
+      otherPlayersOnRadar: value.otherPlayersOnRadar === undefined ?
+        defaults.otherPlayersOnRadar : !!value.otherPlayersOnRadar,
+    };
+  }
+
+  function readAdvancedSettings(modeIndex) {
+    if (!elements.advancedEnabled || !elements.advancedEnabled.checked) return null;
+    return normalizeAdvancedSettings({
+      scoreToWin: elements.scoreToWin.value,
+      respawnSeconds: elements.respawnSeconds.value,
+      lives: elements.lives.value,
+      healthPercent: elements.healthPercent.value,
+      infiniteGrenades: elements.infiniteGrenades.checked,
+      shields: elements.shields.checked,
+      invisiblePlayers: elements.invisiblePlayers.checked,
+      otherPlayersOnRadar: elements.otherPlayersOnRadar.checked,
+    }, modeIndex);
+  }
+
+  function writeAdvancedSettings(value, modeIndex) {
+    if (!elements.advancedEnabled || !elements.advancedFields) return;
+    var settings = value ? normalizeAdvancedSettings(value, modeIndex) : advancedDefaults(modeIndex);
+    elements.advancedEnabled.checked = !!value;
+    elements.scoreToWin.value = String(settings.scoreToWin);
+    elements.respawnSeconds.value = String(settings.respawnSeconds);
+    elements.lives.value = String(settings.lives);
+    elements.healthPercent.value = String(settings.healthPercent);
+    elements.infiniteGrenades.checked = settings.infiniteGrenades;
+    elements.shields.checked = settings.shields;
+    elements.invisiblePlayers.checked = settings.invisiblePlayers;
+    elements.otherPlayersOnRadar.checked = settings.otherPlayersOnRadar;
+    syncAdvancedSettingsState(false);
+  }
+
+  function syncAdvancedSettingsState(busy) {
+    if (!elements.advancedEnabled || !elements.advancedFields) return;
+    elements.advancedEnabled.disabled = !!busy;
+    elements.advancedFields.disabled = !!busy || !elements.advancedEnabled.checked;
+    elements.advancedFields.dataset.enabled = elements.advancedEnabled.checked ? "true" : "false";
+  }
+
+  function resetAdvancedDefaultsForMode() {
+    if (!elements.mode || !elements.advancedEnabled || elements.advancedEnabled.checked) return;
+    var modeIndex = validatedIndex(elements.mode.value, LAST_MODE_INDEX, elements.mode, "mode");
+    writeAdvancedSettings(null, modeIndex);
+  }
+
   function normalizeHostSettings(value) {
     var source = value || {
       mapIndex: elements.map.value,
@@ -825,6 +928,8 @@
       modeIndex: modeIndex,
       mapName: selectedLabel(elements.map, mapIndex),
       modeName: selectedLabel(elements.mode, modeIndex),
+      advanced: value ? normalizeAdvancedSettings(source.advanced, modeIndex) :
+        readAdvancedSettings(modeIndex),
     };
   }
 
@@ -836,18 +941,22 @@
       var settings = normalizeHostSettings(saved);
       elements.map.value = String(settings.mapIndex);
       elements.mode.value = String(settings.modeIndex);
+      writeAdvancedSettings(settings.advanced, settings.modeIndex);
     } catch (error) {
       /* Missing, blocked, or stale storage falls back to Battle Creek + Slayer. */
+      writeAdvancedSettings(null, 0);
     }
     syncHostPickerCards();
   }
 
   function saveHostSettings(settings) {
     try {
-      global.localStorage.setItem(HOST_SETTINGS_STORAGE_KEY, JSON.stringify({
+      var saved = {
         mapIndex: settings.mapIndex,
         modeIndex: settings.modeIndex,
-      }));
+      };
+      if (settings.advanced) saved.advanced = settings.advanced;
+      global.localStorage.setItem(HOST_SETTINGS_STORAGE_KEY, JSON.stringify(saved));
     } catch (error) {
       /* Private browsing may make local storage unavailable; hosting still works. */
     }
@@ -1023,8 +1132,25 @@
   }
 
   function requestConfiguredHost(settings) {
-    if (!wasmFunction("platform_web_online_host_configured")(
-      settings.mapIndex, settings.modeIndex)) {
+    var accepted;
+    if (settings.advanced) {
+      var rules = (settings.advanced.infiniteGrenades ? 1 : 0) |
+        (settings.advanced.shields ? 2 : 0) |
+        (settings.advanced.invisiblePlayers ? 4 : 0) |
+        (settings.advanced.otherPlayersOnRadar ? 8 : 0);
+      accepted = wasmFunction("platform_web_online_host_advanced_configured")(
+        settings.mapIndex,
+        settings.modeIndex,
+        settings.advanced.scoreToWin,
+        settings.advanced.respawnSeconds,
+        settings.advanced.lives,
+        settings.advanced.healthPercent,
+        rules);
+    } else {
+      accepted = wasmFunction("platform_web_online_host_configured")(
+        settings.mapIndex, settings.modeIndex);
+    }
+    if (!accepted) {
       throw new Error("Halo could not accept those host settings.");
     }
   }
@@ -1888,7 +2014,16 @@
       elements.playerSidebar.addEventListener(type, containDialogKeyboardEvent);
     });
     attachPickerEvents(elements.mapOptions, "halo-map-choice", elements.map);
-    attachPickerEvents(elements.modeOptions, "halo-mode-choice", elements.mode);
+    attachPickerEvents(
+      elements.modeOptions,
+      "halo-mode-choice",
+      elements.mode,
+      resetAdvancedDefaultsForMode);
+    if (elements.advancedEnabled) {
+      elements.advancedEnabled.addEventListener("change", function() {
+        syncAdvancedSettingsState(false);
+      });
+    }
     elements.button.addEventListener("click", function() {
       if (session.active && session.role === "host" && session.hostWasReady) {
         showInvite();

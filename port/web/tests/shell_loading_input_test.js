@@ -56,6 +56,8 @@ const controls = shell.match(/<div class="game-controls"[\s\S]*?<\/div>/);
 assert(controls, 'missing game controls');
 assert.match(controls[0], /id="focus"/,
   'Focus game must be a visible control next to mute/fullscreen');
+assert.match(controls[0], /id="game-settings-menu"[\s\S]*id="disable-player-magnetism"/,
+  'the below-game settings menu must expose the aim-magnetism switch');
 assert.doesNotMatch(controls[0], /id="focus"[^>]* hidden/);
 assert.match(shell,
   /<section id="game-frame"[\s\S]*?<canvas[\s\S]*?<footer>[\s\S]*?<div class="game-controls"/,
@@ -98,6 +100,9 @@ assert.doesNotMatch(tabBranch[0], /stopPropagation/,
   'Tab must continue propagating to SDL so it can switch weapons');
 assert.match(shell, /!diagnosticsOverlay\.hidden \|\| onlineDialog\.open/,
   'web dialogs must retain accessible Tab navigation');
+assert.match(shell,
+  /platform_web_set_player_magnetism_enabled[\s\S]*enabled \? 1 : 0/,
+  'the game setting must change Halo player_magnetism_flag through a native export');
 
 const connectedGamepads = xinput.match(
   /static DWORD connected_gamepads\(void\)[\s\S]*?\n\}/);

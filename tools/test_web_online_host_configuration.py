@@ -59,6 +59,68 @@ def test_host_settings_are_applied_after_fast_server_setup():
     assert setup < server_check < configure < ready
 
 
+def test_advanced_host_settings_are_opt_in_and_bounded():
+    source = WEB_ONLINE.read_text(encoding="ascii")
+    advanced = function_body(
+        source,
+        "EMSCRIPTEN_KEEPALIVE int platform_web_online_host_advanced_configured(",
+    )
+    basic = function_body(
+        source,
+        "EMSCRIPTEN_KEEPALIVE int platform_web_online_host_configured(",
+    )
+
+    assert "WEB_ONLINE_REQUEST_ADVANCED_BIT" in advanced
+    assert "score_to_win < 1 || score_to_win > 1000" in advanced
+    assert "respawn_seconds < 0 || respawn_seconds > 30" in advanced
+    assert "lives < 0 || lives > 99" in advanced
+    assert "health_percent < 25 || health_percent > 400" in advanced
+    assert "WEB_ONLINE_REQUEST_ADVANCED_BIT" not in basic
+
+    setup = function_body(source, "static void setup_host(")
+    assert "web_online.host_advanced_settings ?" in setup
+    assert "player_ui_configure_network_server_game_advanced(" in setup
+    assert "player_ui_configure_network_server_game(" in setup
+
+
+def test_advanced_rules_modify_the_stock_variant_only_when_requested():
+    source = PLAYER_UI.read_text(encoding="ascii")
+    basic = function_body(
+        source,
+        "boolean player_ui_configure_network_server_game(",
+    )
+    advanced = function_body(
+        source,
+        "boolean player_ui_configure_network_server_game_advanced(",
+    )
+    internal = function_body(
+        source,
+        "static boolean player_ui_configure_network_server_game_internal(",
+    )
+
+    assert "FALSE," in basic
+    assert "TRUE," in advanced
+    built = internal.index("game_engine_get_variant_by_name(&variant, variant_name);")
+    gated = internal.index("if (advanced_settings)")
+    applied = internal.index("variant.universal_variant.score_to_win = score_to_win;")
+    published = internal.index("network_game_server_change_game_variant(server, &variant);")
+    assert built < gated < applied < published
+
+
+def test_player_magnetism_setting_crosses_threads_through_an_atomic():
+    source = WEB_ONLINE.read_text(encoding="ascii")
+    setter = function_body(
+        source,
+        "EMSCRIPTEN_KEEPALIVE void platform_web_set_player_magnetism_enabled(",
+    )
+    update = function_body(source, "void web_online_ui_update(")
+
+    assert "atomic_store_explicit(" in setter
+    assert "&web_online_requested_player_magnetism" in setter
+    assert "player_magnetism_flag =" in update
+    assert "atomic_load_explicit(" in update
+
+
 def test_online_setup_restores_browser_identity_after_halo_clears_profiles():
     source = WEB_ONLINE.read_text(encoding="ascii")
     restore = function_body(
@@ -79,7 +141,10 @@ def test_online_setup_restores_browser_identity_after_halo_clears_profiles():
 
 def test_only_stock_maps_and_supported_modes_can_reach_engine_apis():
     source = PLAYER_UI.read_text(encoding="ascii")
-    body = function_body(source, "boolean player_ui_configure_network_server_game(")
+    body = function_body(
+        source,
+        "static boolean player_ui_configure_network_server_game_internal(",
+    )
 
     assert string_array(body, "multiplayer_levels") == [
         r"levels\\test\\beavercreek\\beavercreek",

@@ -174,6 +174,25 @@
       font-size: .76rem;
     }
     .game-controls { display: flex; align-items: center; gap: .45rem; }
+    .game-settings-menu { position: relative; }
+    .game-settings-menu > summary { cursor: pointer; list-style: none; }
+    .game-settings-menu > summary::-webkit-details-marker { display: none; }
+    .game-settings-panel {
+      position: absolute;
+      left: 0;
+      bottom: calc(100% + .55rem);
+      z-index: 20;
+      width: min(19rem, calc(100vw - 1.5rem));
+      padding: .75rem;
+      border: 1px solid rgba(91, 184, 255, .38);
+      border-radius: .5rem;
+      background: rgba(2, 15, 30, .97);
+      box-shadow: 0 .8rem 2.4rem rgba(0, 0, 0, .55);
+      text-align: left;
+    }
+    .game-settings-option { display: flex; align-items: center; gap: .55rem; color: #d6eaf5; font-size: .76rem; font-weight: 700; }
+    .game-settings-option input { accent-color: #55bfff; }
+    .game-settings-panel p { margin: .45rem 0 0 1.45rem; color: #7594a7; font-size: .65rem; line-height: 1.35; }
     .control-button {
       display: inline-flex;
       align-items: center;
@@ -474,6 +493,61 @@
     .mode-choice-card img { width: 2.8rem; height: 2.8rem; object-fit: contain; }
     .mode-choice-card .choice-label { padding: .25rem; text-align: left; white-space: normal; }
     .wizard-actions { display: flex; justify-content: flex-end; gap: .5rem; margin-top: .7rem; }
+    .advanced-settings {
+      margin-top: .7rem;
+      border: 1px solid rgba(91, 184, 255, .2);
+      border-radius: .45rem;
+      background: rgba(4, 24, 42, .42);
+    }
+    .advanced-settings > summary {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: .6rem;
+      padding: .58rem .65rem;
+      color: #b9d9eb;
+      cursor: pointer;
+      font-size: .76rem;
+      font-weight: 700;
+      list-style: none;
+    }
+    .advanced-settings > summary::-webkit-details-marker { display: none; }
+    .advanced-settings > summary::after { color: #67c9ff; content: "+"; font-size: 1rem; }
+    .advanced-settings[open] > summary::after { content: "−"; }
+    .advanced-settings-optional { color: #718fa1; font-size: .62rem; font-weight: 500; }
+    .advanced-settings-body { display: grid; gap: .65rem; padding: 0 .65rem .7rem; }
+    .advanced-toggle,
+    .advanced-check {
+      display: flex;
+      align-items: center;
+      gap: .5rem;
+      color: #bdd2de;
+      font-size: .72rem;
+    }
+    .advanced-toggle { padding-bottom: .55rem; border-bottom: 1px solid rgba(91, 184, 255, .14); }
+    .advanced-toggle input,
+    .advanced-check input { accent-color: #55bfff; }
+    .advanced-fields {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: .55rem;
+      margin: 0;
+      padding: 0;
+      border: 0;
+    }
+    .advanced-fields:disabled { opacity: .42; }
+    .advanced-number { display: grid; gap: .28rem; color: #8eabba; font-size: .64rem; }
+    .advanced-number input {
+      min-width: 0;
+      width: 100%;
+      padding: .42rem .5rem;
+      border: 1px solid rgba(112, 190, 235, .25);
+      border-radius: .3rem;
+      color: #e7f5fc;
+      background: rgba(0, 8, 16, .5);
+      font: .74rem/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+    .advanced-checks { display: grid; grid-column: 1 / -1; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .42rem .7rem; }
     .join-direct { margin-top: .7rem; color: #8fa1aa; font-size: .76rem; }
     .join-direct summary { width: fit-content; cursor: pointer; }
     #online-wizard:has(#online-setup[hidden]) #online-wizard-steps { display: none; }
@@ -1333,6 +1407,9 @@
       .mode-choice-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .mode-choice-card { grid-template-columns: 2.7rem minmax(0, 1fr); }
       .mode-choice-card img { width: 2.35rem; height: 2.35rem; }
+      .advanced-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .game-settings-menu > summary { width: 1.95rem; padding: .28rem; }
+      .game-settings-menu > summary span { display: none; }
       .diagnostics-stats { grid-template-columns: 1fr; }
       #player-sidebar { width: min(16rem, calc(100% - 1.5rem)); }
       #player-sidebar[data-collapsed="true"] #player-list,
@@ -1386,6 +1463,16 @@
           <button id="fullscreen" class="control-button icon-only" type="button" aria-label="Enter fullscreen" title="Fullscreen">
             <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M8 3H3v5m13-5h5v5M8 21H3v-5m13 5h5v-5"></path></svg>
           </button>
+          <details id="game-settings-menu" class="game-settings-menu">
+            <summary class="control-button" aria-label="Game settings">
+              <svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.83 2.83-.06-.06a1.7 1.7 0 0 0-1.88-.34 1.7 1.7 0 0 0-1.03 1.56V21h-4v-.08A1.7 1.7 0 0 0 8.97 19.4a1.7 1.7 0 0 0-1.88.34l-.06.06-2.83-2.83.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.56-1.03H3v-4h.08A1.7 1.7 0 0 0 4.6 8.97a1.7 1.7 0 0 0-.34-1.88l-.06-.06L7.03 4.2l.06.06a1.7 1.7 0 0 0 1.88.34A1.7 1.7 0 0 0 10 3.08V3h4v.08a1.7 1.7 0 0 0 1.03 1.52 1.7 1.7 0 0 0 1.88-.34l.06-.06 2.83 2.83-.06.06a1.7 1.7 0 0 0-.34 1.88A1.7 1.7 0 0 0 20.92 10H21v4h-.08A1.7 1.7 0 0 0 19.4 15Z"></path></svg>
+              <span>Game settings</span>
+            </summary>
+            <div class="game-settings-panel">
+              <label class="game-settings-option"><input id="disable-player-magnetism" type="checkbox"> Disable aim magnetism</label>
+              <p>Turns off the subtle aiming pull toward nearby players. Your choice is saved on this device.</p>
+            </div>
+          </details>
         </div>
         <span class="site-credit">Made by <a href="https://mitchellhynes.com/" target="_blank" rel="noopener noreferrer">Mitchell Hynes</a>. <button id="about-open" type="button">Learn more</button> / <a href="https://ko-fi.com/mitchellhynes" target="_blank" rel="noopener noreferrer">Buy me a coffee</a></span>
         <span id="footer-hint" class="hint">Click the game or Focus game to capture the mouse</span>
@@ -1621,6 +1708,24 @@
                   <option value="4">King of the Hill</option>
                   <option value="5">Race</option>
                 </select>
+                <details class="advanced-settings">
+                  <summary><span>Advanced settings</span><span class="advanced-settings-optional">Optional · stock rules by default</span></summary>
+                  <div class="advanced-settings-body">
+                    <label class="advanced-toggle"><input id="online-advanced-enabled" type="checkbox"> Customize this game</label>
+                    <fieldset id="online-advanced-fields" class="advanced-fields" disabled>
+                      <label class="advanced-number">Score to win<input id="online-score-to-win" type="number" min="1" max="1000" step="1" value="15"></label>
+                      <label class="advanced-number">Respawn (sec)<input id="online-respawn-seconds" type="number" min="0" max="30" step="1" value="0"></label>
+                      <label class="advanced-number">Lives (0 = ∞)<input id="online-lives" type="number" min="0" max="99" step="1" value="0"></label>
+                      <label class="advanced-number">Health %<input id="online-health-percent" type="number" min="25" max="400" step="25" value="100"></label>
+                      <div class="advanced-checks">
+                        <label class="advanced-check"><input id="online-shields" type="checkbox" checked> Shields</label>
+                        <label class="advanced-check"><input id="online-other-players-on-radar" type="checkbox" checked> Players on radar</label>
+                        <label class="advanced-check"><input id="online-infinite-grenades" type="checkbox"> Infinite grenades</label>
+                        <label class="advanced-check"><input id="online-invisible-players" type="checkbox"> Invisible players</label>
+                      </div>
+                    </fieldset>
+                  </div>
+                </details>
                 <div class="wizard-actions">
                   <button id="online-mode-back" type="button">Back</button>
                   <button id="online-host" class="primary" type="submit">Create link</button>
@@ -1670,6 +1775,9 @@
     const aboutDialog = document.getElementById("about-dialog");
     const aboutCloseButton = document.getElementById("about-close");
     const onlineDialog = document.getElementById("online-dialog");
+    const gameSettingsMenu = document.getElementById("game-settings-menu");
+    const disablePlayerMagnetism = document.getElementById("disable-player-magnetism");
+    const GAME_SETTINGS_STORAGE_KEY = "halo.web.game-settings.v1";
     let audioMuted = true;
     let performancePrevious = null;
     let secretClickCount = 0;
@@ -2213,6 +2321,33 @@
       if (!audioMuted) refreshAudioState();
     }
 
+    function applyPlayerMagnetism() {
+      const enabled = !disablePlayerMagnetism.checked;
+      try {
+        localStorage.setItem(GAME_SETTINGS_STORAGE_KEY, JSON.stringify({
+          disablePlayerMagnetism: !enabled,
+        }));
+      } catch (error) {
+        // Storage can be unavailable in strict private browsing; the setting
+        // still applies for this page load.
+      }
+      if (typeof Module !== "undefined" &&
+          typeof Module._platform_web_set_player_magnetism_enabled === "function") {
+        Module._platform_web_set_player_magnetism_enabled(enabled ? 1 : 0);
+      }
+    }
+
+    try {
+      const savedGameSettings = JSON.parse(localStorage.getItem(GAME_SETTINGS_STORAGE_KEY));
+      disablePlayerMagnetism.checked = !!(savedGameSettings && savedGameSettings.disablePlayerMagnetism);
+    } catch (error) {
+      disablePlayerMagnetism.checked = false;
+    }
+    disablePlayerMagnetism.addEventListener("change", applyPlayerMagnetism);
+    ["keydown", "keyup", "keypress"].forEach(type => {
+      gameSettingsMenu.addEventListener(type, event => event.stopPropagation());
+    });
+
     function formatBytes(value) {
       if (!Number.isFinite(value) || value < 0) return "Unavailable";
       const units = ["B", "KB", "MB", "GB"];
@@ -2474,7 +2609,7 @@
 
     function webUiOwnsKeyboardFocus() {
       const active = document.activeElement;
-      if (!diagnosticsOverlay.hidden || onlineDialog.open || aboutDialog.open) return true;
+      if (!diagnosticsOverlay.hidden || onlineDialog.open || aboutDialog.open || gameSettingsMenu.open) return true;
       return active && active !== canvas && typeof active.matches === "function" &&
         active.matches("input, select, textarea, button, summary, [contenteditable='true']");
     }
@@ -2698,6 +2833,7 @@
         runtimeStage = "runtime-initialized";
         sendRuntimeTelemetry("runtime_initialized", runtimeStage);
         applyMute();
+        applyPlayerMagnetism();
         if (window.HaloOnline) {
           window.HaloOnline.runtimeReady();
         }

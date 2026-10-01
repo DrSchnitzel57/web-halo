@@ -654,9 +654,18 @@ void player_ui_fast_setup_network_server(
 	return;
 }
 
-boolean player_ui_configure_network_server_game(
+static boolean player_ui_configure_network_server_game_internal(
 	long multiplayer_level_index,
-	long game_mode_index)
+	long game_mode_index,
+	boolean advanced_settings,
+	long score_to_win,
+	long respawn_seconds,
+	long lives,
+	long health_percent,
+	boolean infinite_grenades,
+	boolean shields,
+	boolean invisible_players,
+	boolean other_players_on_radar)
 {
 	static char const *const multiplayer_levels[] =
 	{
@@ -713,9 +722,82 @@ boolean player_ui_configure_network_server_game(
 	game_engine_override_map_name(map_name);
 	network_game_server_change_map_name(server, map_name);
 	game_engine_get_variant_by_name(&variant, variant_name);
+	if (advanced_settings)
+	{
+		/* Browser custom games are deliberately applied to the stock variant,
+		so every field which is not exposed here keeps the original Halo preset.
+		The public advanced entry point validates all values before this helper. */
+		variant.universal_variant.score_to_win = score_to_win;
+		variant.universal_variant.respawn_time = respawn_seconds * TICKS_PER_SECOND;
+		variant.universal_variant.lives = lives;
+		variant.universal_variant.health = (real)health_percent / 100.0f;
+		SET_FLAG(
+			variant.universal_variant.flags,
+			_game_variant_infinite_grenades_bit,
+			infinite_grenades);
+		SET_FLAG(
+			variant.universal_variant.flags,
+			_game_variant_no_shields_bit,
+			!shields);
+		SET_FLAG(
+			variant.universal_variant.flags,
+			_game_variant_always_invisible_bit,
+			invisible_players);
+		SET_FLAG(
+			variant.universal_variant.flags,
+			_game_variant_draw_object_in_motion_sensor_bit,
+			other_players_on_radar);
+		game_engine_variant_cleanup(&variant);
+	}
 	player_ui_set_game_variant(&variant);
 	network_game_server_change_game_variant(server, &variant);
 	return TRUE;
+}
+
+boolean player_ui_configure_network_server_game(
+	long multiplayer_level_index,
+	long game_mode_index)
+{
+	return player_ui_configure_network_server_game_internal(
+		multiplayer_level_index,
+		game_mode_index,
+		FALSE,
+		0, 0, 0, 0,
+		FALSE, FALSE, FALSE, FALSE);
+}
+
+boolean player_ui_configure_network_server_game_advanced(
+	long multiplayer_level_index,
+	long game_mode_index,
+	long score_to_win,
+	long respawn_seconds,
+	long lives,
+	long health_percent,
+	boolean infinite_grenades,
+	boolean shields,
+	boolean invisible_players,
+	boolean other_players_on_radar)
+{
+	if (score_to_win < 1 || score_to_win > 1000 ||
+		respawn_seconds < 0 || respawn_seconds > 30 ||
+		lives < 0 || lives > 99 ||
+		health_percent < 25 || health_percent > 400)
+	{
+		return FALSE;
+	}
+
+	return player_ui_configure_network_server_game_internal(
+		multiplayer_level_index,
+		game_mode_index,
+		TRUE,
+		score_to_win,
+		respawn_seconds,
+		lives,
+		health_percent,
+		!!infinite_grenades,
+		!!shields,
+		!!invisible_players,
+		!!other_players_on_radar);
 }
 
 boolean player_ui_edit_profile_is_default_profile(

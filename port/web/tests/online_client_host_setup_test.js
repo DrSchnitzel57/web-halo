@@ -86,8 +86,18 @@ const elements = {};
   'online-join-confirm', 'online-join-profile', 'online-join-summary',
   'online-join-status',
   'online-map-options', 'online-mode-options',
+  'online-advanced-enabled', 'online-advanced-fields',
+  'online-score-to-win', 'online-respawn-seconds', 'online-lives',
+  'online-health-percent', 'online-infinite-grenades', 'online-shields',
+  'online-invisible-players', 'online-other-players-on-radar',
   'player-sidebar', 'player-count', 'player-empty', 'player-sidebar-toggle',
 ].forEach(id => { elements[id] = element(); });
+elements['online-score-to-win'].value = '15';
+elements['online-respawn-seconds'].value = '0';
+elements['online-lives'].value = '0';
+elements['online-health-percent'].value = '100';
+elements['online-shields'].checked = true;
+elements['online-other-players-on-radar'].checked = true;
 const styleNames = [
   'white', 'black', 'red', 'blue', 'sage', 'yellow', 'lime', 'pink', 'purple',
   'cyan', 'cornflower', 'orange', 'teal', 'forest', 'brown', 'tan', 'maroon', 'rose',
@@ -135,6 +145,7 @@ const storage = new Map([
   ['halo.web.player-profile.v1', JSON.stringify({ name: 'TestSpartan', style: 'rose' })],
 ]);
 const configuredHosts = [];
+const advancedHosts = [];
 const customizations = [];
 const legacyCommands = [];
 const socketMessages = [];
@@ -219,6 +230,10 @@ const context = {
     _platform_web_online_get_state: () => gameState,
     _platform_web_online_host_configured: (mapIndex, modeIndex) => {
       configuredHosts.push([mapIndex, modeIndex]);
+      return 1;
+    },
+    _platform_web_online_host_advanced_configured: (...values) => {
+      advancedHosts.push(values);
       return 1;
     },
     _platform_web_online_request: command => {
@@ -335,6 +350,7 @@ vm.runInContext(
 
   await context.HaloOnline.host();
   assert.deepEqual(configuredHosts, [[9, 2]]);
+  assert.deepEqual(advancedHosts, []);
   assert.deepEqual(legacyCommands, []);
   assert.deepEqual(JSON.parse(storage.get('halo.web.host-settings.v1')),
     { mapIndex: 9, modeIndex: 2 });
@@ -413,6 +429,39 @@ vm.runInContext(
   assert.equal(elements['player-sidebar'].hidden, false);
   assert.equal(elements['player-sidebar'].dataset.onlineActive, 'false');
   assert.equal(elements['player-count'].textContent, '0/128');
+
+  await context.HaloOnline.host({
+    mapIndex: 4,
+    modeIndex: 0,
+    advanced: {
+      scoreToWin: 25,
+      respawnSeconds: 3,
+      lives: 5,
+      healthPercent: 150,
+      infiniteGrenades: true,
+      shields: false,
+      invisiblePlayers: true,
+      otherPlayersOnRadar: false,
+    },
+  });
+  assert.deepEqual(configuredHosts, [[9, 2]],
+    'advanced hosting must not pass through the stock host ABI');
+  assert.deepEqual(advancedHosts, [[4, 0, 25, 3, 5, 150, 5]]);
+  assert.deepEqual(JSON.parse(storage.get('halo.web.host-settings.v1')), {
+    mapIndex: 4,
+    modeIndex: 0,
+    advanced: {
+      scoreToWin: 25,
+      respawnSeconds: 3,
+      lives: 5,
+      healthPercent: 150,
+      infiniteGrenades: true,
+      shields: false,
+      invisiblePlayers: true,
+      otherPlayersOnRadar: false,
+    },
+  });
+  await context.HaloOnline.leave();
 
   console.log('online_client host setup tests passed');
 })().catch(error => {

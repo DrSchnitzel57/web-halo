@@ -40,6 +40,17 @@ void player_ui_set_active_player_profile(
 unsigned char player_ui_configure_network_server_game(
 	long multiplayer_level_index,
 	long game_mode_index);
+unsigned char player_ui_configure_network_server_game_advanced(
+	long multiplayer_level_index,
+	long game_mode_index,
+	long score_to_win,
+	long respawn_seconds,
+	long lives,
+	long health_percent,
+	unsigned char infinite_grenades,
+	unsigned char shields,
+	unsigned char invisible_players,
+	unsigned char other_players_on_radar);
 void game_connection_set(short connection);
 void main_goto_main_menu(void);
 short network_game_client_get_state(struct network_game_client *client, short *state_data);
@@ -72,6 +83,13 @@ enum
 	WEB_ONLINE_REQUEST_COMMAND_MASK = 0xff,
 	WEB_ONLINE_REQUEST_MAP_SHIFT = 8,
 	WEB_ONLINE_REQUEST_MODE_SHIFT = 16,
+	WEB_ONLINE_REQUEST_ADVANCED_BIT = 1 << 24,
+
+	WEB_ONLINE_RULE_INFINITE_GRENADES_BIT = 0,
+	WEB_ONLINE_RULE_SHIELDS_BIT,
+	WEB_ONLINE_RULE_INVISIBLE_PLAYERS_BIT,
+	WEB_ONLINE_RULE_OTHER_PLAYERS_ON_RADAR_BIT,
+	WEB_ONLINE_RULE_MASK = 0xf,
 };
 
 #define WEB_FALSE ((unsigned char)0)
@@ -94,6 +112,12 @@ _Static_assert(sizeof(struct web_online_player_profile) == 0x30,
 /* Command and host options share one atomic word so the game thread can never
 observe a new command with map/mode values from a different browser request. */
 static atomic_int web_online_requested_request = ATOMIC_VAR_INIT(_web_online_command_none);
+static atomic_int web_online_requested_score_to_win = ATOMIC_VAR_INIT(15);
+static atomic_int web_online_requested_respawn_seconds = ATOMIC_VAR_INIT(0);
+static atomic_int web_online_requested_lives = ATOMIC_VAR_INIT(0);
+static atomic_int web_online_requested_health_percent = ATOMIC_VAR_INIT(100);
+static atomic_int web_online_requested_rules = ATOMIC_VAR_INIT(0xa);
+static atomic_int web_online_requested_player_magnetism = ATOMIC_VAR_INIT(1);
 static atomic_int web_online_public_state = ATOMIC_VAR_INIT(_web_online_state_idle);
 static atomic_int web_online_public_error = ATOMIC_VAR_INIT(_web_online_error_none);
 static atomic_int web_online_transport_state = ATOMIC_VAR_INIT(_web_online_transport_disconnected);
@@ -114,6 +138,12 @@ static struct
 	int wait_frames;
 	int host_map_index;
 	int host_mode_index;
+	int host_advanced_settings;
+	int host_score_to_win;
+	int host_respawn_seconds;
+	int host_lives;
+	int host_health_percent;
+	int host_rules;
 	float seconds;
 	float player_retry_seconds;
 } web_online;
@@ -162,6 +192,49 @@ EMSCRIPTEN_KEEPALIVE int platform_web_online_host_configured(
 		pack_request(_web_online_command_host, map_index, mode_index),
 		memory_order_release);
 	return 1;
+}
+
+EMSCRIPTEN_KEEPALIVE int platform_web_online_host_advanced_configured(
+	int map_index,
+	int mode_index,
+	int score_to_win,
+	int respawn_seconds,
+	int lives,
+	int health_percent,
+	int rules)
+{
+	if (map_index < 0 || map_index >= _web_online_multiplayer_level_count ||
+		mode_index < 0 || mode_index >= _web_online_game_mode_count ||
+		score_to_win < 1 || score_to_win > 1000 ||
+		respawn_seconds < 0 || respawn_seconds > 30 ||
+		lives < 0 || lives > 99 ||
+		health_percent < 25 || health_percent > 400 ||
+		(rules & ~WEB_ONLINE_RULE_MASK))
+	{
+		return 0;
+	}
+
+	/* Publish the rules first, then release the request containing the advanced
+	bit. The game thread acquires that request before reading this mailbox. */
+	atomic_store_explicit(&web_online_requested_score_to_win, score_to_win, memory_order_relaxed);
+	atomic_store_explicit(&web_online_requested_respawn_seconds, respawn_seconds, memory_order_relaxed);
+	atomic_store_explicit(&web_online_requested_lives, lives, memory_order_relaxed);
+	atomic_store_explicit(&web_online_requested_health_percent, health_percent, memory_order_relaxed);
+	atomic_store_explicit(&web_online_requested_rules, rules, memory_order_relaxed);
+	atomic_store_explicit(
+		&web_online_requested_request,
+		pack_request(_web_online_command_host, map_index, mode_index) |
+			WEB_ONLINE_REQUEST_ADVANCED_BIT,
+		memory_order_release);
+	return 1;
+}
+
+EMSCRIPTEN_KEEPALIVE void platform_web_set_player_magnetism_enabled(int enabled)
+{
+	atomic_store_explicit(
+		&web_online_requested_player_magnetism,
+		!!enabled,
+		memory_order_release);
 }
 
 EMSCRIPTEN_KEEPALIVE int platform_web_online_set_player_customization(
@@ -334,7 +407,11 @@ static void fail_session(int error)
 	publish_state(_web_online_state_error);
 }
 
-static void begin_request(int command, int map_index, int mode_index)
+static void begin_request(
+	int command,
+	int map_index,
+	int mode_index,
+	int advanced_settings)
 {
 	platform_log("web online: request %s", command == _web_online_command_host ? "host" : "join");
 	if (web_online.command || web_online.setup)
@@ -347,6 +424,20 @@ static void begin_request(int command, int map_index, int mode_index)
 	web_online.command = command;
 	web_online.host_map_index = map_index;
 	web_online.host_mode_index = mode_index;
+	web_online.host_advanced_settings = advanced_settings;
+	if (advanced_settings)
+	{
+		web_online.host_score_to_win = atomic_load_explicit(
+			&web_online_requested_score_to_win, memory_order_relaxed);
+		web_online.host_respawn_seconds = atomic_load_explicit(
+			&web_online_requested_respawn_seconds, memory_order_relaxed);
+		web_online.host_lives = atomic_load_explicit(
+			&web_online_requested_lives, memory_order_relaxed);
+		web_online.host_health_percent = atomic_load_explicit(
+			&web_online_requested_health_percent, memory_order_relaxed);
+		web_online.host_rules = atomic_load_explicit(
+			&web_online_requested_rules, memory_order_relaxed);
+	}
 	publish_error(_web_online_error_none);
 	publish_state(_web_online_state_waiting_for_main_menu);
 }
@@ -373,9 +464,21 @@ static void setup_host(void)
 		fail_session(_web_online_error_host_setup_failed);
 		return;
 	}
-	if (!player_ui_configure_network_server_game(
-		web_online.host_map_index,
-		web_online.host_mode_index))
+	if (web_online.host_advanced_settings ?
+		!player_ui_configure_network_server_game_advanced(
+			web_online.host_map_index,
+			web_online.host_mode_index,
+			web_online.host_score_to_win,
+			web_online.host_respawn_seconds,
+			web_online.host_lives,
+			web_online.host_health_percent,
+			(web_online.host_rules & (1 << WEB_ONLINE_RULE_INFINITE_GRENADES_BIT)) != 0,
+			(web_online.host_rules & (1 << WEB_ONLINE_RULE_SHIELDS_BIT)) != 0,
+			(web_online.host_rules & (1 << WEB_ONLINE_RULE_INVISIBLE_PLAYERS_BIT)) != 0,
+			(web_online.host_rules & (1 << WEB_ONLINE_RULE_OTHER_PLAYERS_ON_RADAR_BIT)) != 0) :
+		!player_ui_configure_network_server_game(
+			web_online.host_map_index,
+			web_online.host_mode_index))
 	{
 		fail_session(_web_online_error_host_setup_failed);
 		return;
@@ -538,6 +641,7 @@ static void update_join(float seconds)
 
 void web_online_ui_update(int main_menu_loaded, float seconds)
 {
+	extern unsigned char player_magnetism_flag;
 	int request = atomic_exchange_explicit(
 		&web_online_requested_request,
 		_web_online_command_none,
@@ -545,6 +649,11 @@ void web_online_ui_update(int main_menu_loaded, float seconds)
 	int command = request & WEB_ONLINE_REQUEST_COMMAND_MASK;
 	int map_index = (request >> WEB_ONLINE_REQUEST_MAP_SHIFT) & 0xff;
 	int mode_index = (request >> WEB_ONLINE_REQUEST_MODE_SHIFT) & 0xff;
+	int advanced_settings = (request & WEB_ONLINE_REQUEST_ADVANCED_BIT) != 0;
+
+	player_magnetism_flag = (unsigned char)atomic_load_explicit(
+		&web_online_requested_player_magnetism,
+		memory_order_acquire);
 
 	/* Browser calls only publish atomics.  Apply the selected identity here,
 	 * before host/join can build its network_player from the active profile. */
@@ -556,7 +665,7 @@ void web_online_ui_update(int main_menu_loaded, float seconds)
 		return;
 	}
 	if (command == _web_online_command_host || command == _web_online_command_join)
-		begin_request(command, map_index, mode_index);
+		begin_request(command, map_index, mode_index, advanced_settings);
 
 	if (!web_online.command)
 		return;
