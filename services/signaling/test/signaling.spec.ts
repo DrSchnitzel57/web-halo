@@ -149,7 +149,13 @@ async function connectSession(
   return { socket, welcome: await welcomePromise };
 }
 
-async function livePlayerCount(): Promise<number> {
+interface PresenceSummary {
+  campaign: number;
+  online: number;
+  today: number;
+}
+
+async function livePresence(): Promise<PresenceSummary> {
   const response = await exports.default.fetch(
     new Request(`${API_ORIGIN}/v1/presence`, {
       headers: { Origin: GAME_ORIGIN },
@@ -157,22 +163,65 @@ async function livePlayerCount(): Promise<number> {
   );
   expect(response.status).toBe(200);
   expect(response.headers.get("Access-Control-Allow-Origin")).toBe(GAME_ORIGIN);
-  const body = await response.json<{ players: number }>();
-  return body.players;
+  return response.json<PresenceSummary>();
+}
+
+async function presenceHeartbeat(
+  sessionId: string,
+  campaign: boolean,
+  address: string,
+  userAgent: string,
+): Promise<PresenceSummary> {
+  const response = await exports.default.fetch(
+    new Request(`${API_ORIGIN}/v1/presence`, {
+      body: JSON.stringify({ campaign, sessionId }),
+      headers: {
+        "CF-Connecting-IP": address,
+        "Content-Type": "application/json",
+        Origin: GAME_ORIGIN,
+        "User-Agent": userAgent,
+      },
+      method: "POST",
+    }),
+  );
+  expect(response.status).toBe(200);
+  return response.json<PresenceSummary>();
 }
 
 describe("signaling API", () => {
-  it("reports an anonymous live count for connected multiplayer players", async () => {
-    expect(await livePlayerCount()).toBe(0);
+  it("reports anonymous online, campaign, and daily player counts", async () => {
+    expect(await livePresence()).toMatchObject({ campaign: 0, online: 0, today: 0 });
+
+    const firstSession = "11111111-1111-4111-8111-111111111111";
+    const secondSession = "22222222-2222-4222-8222-222222222222";
+    expect(await presenceHeartbeat(
+      firstSession, true, "192.0.2.10", "Test Browser A",
+    )).toMatchObject({ campaign: 1, online: 0, today: 1 });
+    expect(await presenceHeartbeat(
+      secondSession, true, "192.0.2.10", "Test Browser A",
+    )).toMatchObject({ campaign: 1, online: 0, today: 1 });
+    expect(await presenceHeartbeat(
+      "33333333-3333-4333-8333-333333333333",
+      false,
+      "192.0.2.11",
+      "Test Browser B",
+    )).toMatchObject({ campaign: 1, online: 0, today: 2 });
 
     const room = await createRoom("001122334455", 3);
     const host = await connectSession(room.host.session.websocketUrl);
-    expect(await livePlayerCount()).toBe(1);
+    expect(await livePresence()).toMatchObject({ campaign: 1, online: 1, today: 2 });
 
     const guestResponse = await createGuestSession(room);
     const guestBody = await guestResponse.json<CreateSessionResponse>();
     const guest = await connectSession(guestBody.session.websocketUrl);
-    expect(await livePlayerCount()).toBe(2);
+    expect(await livePresence()).toMatchObject({ campaign: 1, online: 2, today: 2 });
+
+    expect(await presenceHeartbeat(
+      firstSession, false, "192.0.2.10", "Test Browser A",
+    )).toMatchObject({ campaign: 1, online: 2, today: 2 });
+    expect(await presenceHeartbeat(
+      secondSession, false, "192.0.2.10", "Test Browser A",
+    )).toMatchObject({ campaign: 0, online: 2, today: 2 });
 
     guest.socket.close(1000, "test complete");
     host.socket.close(1000, "test complete");

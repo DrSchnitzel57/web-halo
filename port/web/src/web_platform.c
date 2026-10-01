@@ -3,6 +3,7 @@
 #include "platform.h"
 #include "posix.h"
 #include "gl.h"
+#include "main/main.h"
 
 #include <emscripten/emscripten.h>
 #include <emscripten/heap.h>
@@ -83,6 +84,11 @@ EMSCRIPTEN_KEEPALIVE long platform_web_map_load_index(void)
 			return (long)index;
 	}
 	return -1;
+}
+
+EMSCRIPTEN_KEEPALIVE int platform_web_campaign_active(void)
+{
+	return platform_web_campaign_load_index() >= 0 || main_campaign_in_progress();
 }
 
 void platform_web_initialize(void)

@@ -194,20 +194,44 @@
     elements.playerEmpty = byId("player-empty");
     elements.playerSidebarToggle = byId("player-sidebar-toggle");
     elements.livePlayerCount = byId("live-player-count");
+    elements.livePlayerOnline = byId("live-player-online");
+    elements.livePlayerCampaign = byId("live-player-campaign");
+    elements.livePlayerToday = byId("live-player-today");
+  }
+
+  function playerCountLabel(count, suffix) {
+    return count + (count === 1 ? " player " : " players ") + suffix;
   }
 
   async function refreshLivePlayerCount() {
     if (!elements.livePlayerCount || document.hidden) return;
     try {
-      var result = await fetchJson("/v1/presence", {
+      var snapshot = global.HaloTelemetry &&
+        typeof global.HaloTelemetry.presence === "function"
+        ? global.HaloTelemetry.presence() : null;
+      var result = await fetchJson("/v1/presence", snapshot ? {
+        body: JSON.stringify(snapshot),
+        cache: "no-store",
+        method: "POST",
+      } : {
         cache: "no-store",
         headers: { Accept: "application/json" },
         method: "GET",
       });
-      if (!Number.isInteger(result.players) || result.players < 0) return;
-      elements.livePlayerCount.value = String(result.players);
-      elements.livePlayerCount.textContent =
-        result.players + (result.players === 1 ? " player online" : " players online");
+      if (
+        !Number.isInteger(result.online) || result.online < 0 ||
+        !Number.isInteger(result.campaign) || result.campaign < 0 ||
+        !Number.isInteger(result.today) || result.today < 0
+      ) return;
+      elements.livePlayerOnline.textContent = playerCountLabel(result.online, "online");
+      elements.livePlayerCampaign.textContent = playerCountLabel(result.campaign, "in campaign");
+      elements.livePlayerToday.textContent = playerCountLabel(result.today, "today");
+      elements.livePlayerCount.setAttribute(
+        "aria-label",
+        playerCountLabel(result.online, "online") + ", " +
+        playerCountLabel(result.campaign, "in campaign") + ", " +
+        playerCountLabel(result.today, "today"),
+      );
       elements.livePlayerCount.hidden = false;
     } catch (error) {
       /* Presence is decorative and must never interfere with the game. */
@@ -215,7 +239,8 @@
   }
 
   function startPresencePolling() {
-    if (!elements.livePlayerCount) return;
+    if (!elements.livePlayerCount || !elements.livePlayerOnline ||
+        !elements.livePlayerCampaign || !elements.livePlayerToday) return;
     refreshLivePlayerCount();
     if (session.presenceTimer) global.clearInterval(session.presenceTimer);
     session.presenceTimer = global.setInterval(

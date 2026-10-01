@@ -47,6 +47,22 @@ async function opaqueId(env: RuntimeEnv, value: string): Promise<string> {
 }
 
 /**
+ * A privacy-preserving visitor identity for aggregate presence counters.
+ * Neither the address nor user agent is persisted; only a domain-separated
+ * HMAC reaches the Durable Object.
+ */
+export async function presenceIdFor(
+  request: Request,
+  env: RuntimeEnv,
+): Promise<string> {
+  const userAgent = request.headers.get("User-Agent") ?? "unknown";
+  return opaqueId(
+    env,
+    `presence\u0000${clientAddress(request)}\u0000${userAgent}`,
+  );
+}
+
+/**
  * Network-scoped abuse identity without persisting a raw IP address. The
  * client-controlled game identifier is deliberately excluded so changing it
  * cannot reset TURN accounting or bypass a ban.

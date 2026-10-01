@@ -143,7 +143,13 @@ assert.match(terminal, /terminal_render_enable \|\| terminal_globals\.input_stat
   'backquote console output must be visible while its input is active');
 assert.match(webPlatform, /platform_web_map_load_progress/);
 assert.match(webPlatform, /platform_web_map_load_index/);
+assert.match(webPlatform,
+  /platform_web_campaign_active[\s\S]*?main_campaign_in_progress/,
+  'campaign presence must come from the running game rather than a browser guess');
 assert.match(webOnlineUi, /platform_web_online_get_client_state/);
+assert.match(shell,
+  /id="live-player-online"[\s\S]*?players online[\s\S]*?id="live-player-campaign"[\s\S]*?players in campaign[\s\S]*?id="live-player-today"[\s\S]*?players today/,
+  'the subtle sidebar presence line must show online, campaign, and daily counts');
 assert.match(shell,
   /function sendRuntimeTelemetry\([\s\S]*?\/v1\/telemetry\/runtime[\s\S]*?function updateRuntimeTelemetry\([\s\S]*?map_load_stalled/,
   'startup, online and map-load milestones must reach runtime telemetry');

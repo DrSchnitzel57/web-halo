@@ -1280,6 +1280,15 @@ short main_get_current_solo_level(
 	return main_get_solo_level_from_name(main_globals.soloplayer_map_name);
 }
 
+boolean main_campaign_in_progress(
+	void)
+{
+	return game_in_progress() &&
+		!main_globals.main_menu_scenario_loaded &&
+		main_globals.connection == _game_connection_local &&
+		main_get_current_solo_level() != NONE;
+}
+
 char const *main_get_solo_level_name(
 	short level)
 {

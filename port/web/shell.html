@@ -639,8 +639,9 @@
       text-transform: uppercase;
     }
     .live-player-count {
-      display: inline-flex;
+      display: flex;
       align-items: center;
+      flex-wrap: wrap;
       gap: .32rem;
       width: fit-content;
       color: rgba(151, 194, 218, .66);
@@ -656,6 +657,11 @@
       background: rgba(88, 201, 153, .72);
       box-shadow: 0 0 .45rem rgba(88, 201, 153, .36);
       content: "";
+    }
+    .live-player-count-item + .live-player-count-item::before {
+      margin-right: .32rem;
+      color: rgba(151, 194, 218, .32);
+      content: "·";
     }
     #online {
       width: 100%;
@@ -1420,7 +1426,11 @@
       <div class="sidebar-launch">
         <span class="sidebar-kicker">Online multiplayer</span>
         <button id="online" type="button" data-state="offline">Play online</button>
-        <output id="live-player-count" class="live-player-count" aria-label="Live multiplayer player count" hidden></output>
+        <div id="live-player-count" class="live-player-count" aria-live="polite" hidden>
+          <output id="live-player-online" class="live-player-count-item">0 players online</output>
+          <output id="live-player-campaign" class="live-player-count-item">0 players in campaign</output>
+          <output id="live-player-today" class="live-player-count-item">0 players today</output>
+        </div>
       </div>
       <section id="player-session" class="sidebar-roster" aria-labelledby="player-sidebar-title">
         <div class="player-sidebar-heading">
@@ -1897,6 +1907,12 @@
     window.HaloTelemetry = Object.freeze({
       event(event, stage, details) {
         sendRuntimeTelemetry(event, stage, details || {});
+      },
+      presence() {
+        return {
+          campaign: moduleMetric("_platform_web_campaign_active", 0) > 0,
+          sessionId: telemetrySessionId,
+        };
       },
       setContext(context) {
         if (context && ["offline", "host", "guest", "unknown"].includes(context.role)) {
