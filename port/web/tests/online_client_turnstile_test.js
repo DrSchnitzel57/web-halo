@@ -158,21 +158,24 @@ async function settle() {
   assert.equal(renderCalls.length, 1);
   assert.equal(renderCalls[0].action, 'join_room');
   assert.equal(elements['online-dialog'].dataset.view, 'join');
-  assert.equal(elements['online-join-profile'].disabled, true,
-    'Join stays disabled before Turnstile returns a token');
+  assert.equal(elements['online-join-profile'].disabled, false,
+    'Join remains actionable while Turnstile and Halo finish');
   assert.equal(elements['online-human-verification'].dataset.state, 'loading');
   assert.match(elements['online-verification-status'].textContent, /Checking/);
 
-  context.HaloOnline.runtimeReady();
-  assert.equal(elements['online-join-profile'].disabled, true,
-    'runtime readiness must not bypass human verification');
+  elements['online-join-profile'].listeners.click();
+  assert.equal(requestBodies.length, 0,
+    'an early click queues the join without bypassing verification');
+  assert.match(elements['online-join-status'].textContent, /automatically/);
 
   renderCalls[0].callback('first-token');
   assert.equal(elements['online-human-verification'].dataset.state, 'ready');
-  assert.match(elements['online-verification-status'].textContent, /Verified/);
+  assert.match(elements['online-verification-status'].textContent, /Halo is still loading/);
   assert.equal(elements['online-join-profile'].disabled, false);
+  assert.equal(requestBodies.length, 0,
+    'a verified token still waits for the runtime');
 
-  elements['online-join-profile'].listeners.click();
+  context.HaloOnline.runtimeReady();
   await settle();
   assert.equal(requestBodies.length, 1);
   assert.equal(requestBodies[0].turnstileToken, 'first-token');
@@ -180,7 +183,8 @@ async function settle() {
     'a rejected token keeps the invite ready for another attempt');
   assert.equal(elements['online-human-verification'].dataset.state, 'error');
   assert.equal(elements['online-verification-retry'].hidden, false);
-  assert.equal(elements['online-join-profile'].disabled, true);
+  assert.equal(elements['online-join-profile'].disabled, false,
+    'a verification error must leave the manual retry path clickable');
   assert.match(elements['online-verification-status'].textContent, /won't need to refresh/);
 
   elements['online-verification-retry'].listeners.click();
@@ -190,8 +194,8 @@ async function settle() {
   assert.equal(elements['online-verification-retry'].hidden, true);
 
   renderCalls[0].callback('stale-token');
-  assert.equal(elements['online-join-profile'].disabled, true,
-    'callbacks from removed widgets cannot re-enable joining');
+  assert.equal(elements['online-human-verification'].dataset.state, 'loading',
+    'callbacks from removed widgets cannot satisfy verification');
   renderCalls[1].callback('retry-token');
   assert.equal(elements['online-join-profile'].disabled, false);
   assert.match(elements['online-verification-status'].textContent, /Verified/);

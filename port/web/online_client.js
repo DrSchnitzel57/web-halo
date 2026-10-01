@@ -13,6 +13,7 @@
   var ROOM_CAPACITY = 128;
   var MAX_PENDING_SIGNALING_MESSAGES = ROOM_CAPACITY * 128;
   var HEARTBEAT_MILLISECONDS = 40000;
+  var PRESENCE_POLL_MILLISECONDS = 30000;
   var GAME_POLL_MILLISECONDS = 200;
   var TURNSTILE_RENDER_ATTEMPTS = 80;
   var HOST_SETTINGS_STORAGE_KEY = "halo.web.host-settings.v1";
@@ -116,7 +117,9 @@
     hostSettings: null,
     guestWasJoined: false,
     leavePromise: null,
+    joinRequested: false,
     wizardStep: "map",
+    presenceTimer: 0,
   };
 
   function byId(id) {
@@ -190,6 +193,38 @@
     elements.playerCount = byId("player-count");
     elements.playerEmpty = byId("player-empty");
     elements.playerSidebarToggle = byId("player-sidebar-toggle");
+    elements.livePlayerCount = byId("live-player-count");
+  }
+
+  async function refreshLivePlayerCount() {
+    if (!elements.livePlayerCount || document.hidden) return;
+    try {
+      var result = await fetchJson("/v1/presence", {
+        cache: "no-store",
+        headers: { Accept: "application/json" },
+        method: "GET",
+      });
+      if (!Number.isInteger(result.players) || result.players < 0) return;
+      elements.livePlayerCount.value = String(result.players);
+      elements.livePlayerCount.textContent =
+        result.players + (result.players === 1 ? " player online" : " players online");
+      elements.livePlayerCount.hidden = false;
+    } catch (error) {
+      /* Presence is decorative and must never interfere with the game. */
+    }
+  }
+
+  function startPresencePolling() {
+    if (!elements.livePlayerCount) return;
+    refreshLivePlayerCount();
+    if (session.presenceTimer) global.clearInterval(session.presenceTimer);
+    session.presenceTimer = global.setInterval(
+      refreshLivePlayerCount,
+      PRESENCE_POLL_MILLISECONDS,
+    );
+    document.addEventListener("visibilitychange", function() {
+      if (!document.hidden) refreshLivePlayerCount();
+    });
   }
 
   function buildId() {
@@ -255,8 +290,7 @@
         !turnstileReady("create_room");
     }
     if (elements.joinProfile) {
-      elements.joinProfile.disabled = humanVerification.busy || !session.runtimeReady ||
-        !turnstileReady("join_room");
+      elements.joinProfile.disabled = humanVerification.busy;
     }
   }
 
@@ -331,8 +365,11 @@
           humanVerification.token = token;
           setVerificationState(
             "ready",
-            action === "join_room" ? "Verified — ready to join." : "Verified — ready to create your link.");
-          setStatus("");
+            action === "join_room"
+              ? (session.runtimeReady ? "Verified — ready to join." : "Verified — Halo is still loading.")
+              : "Verified — ready to create your link.");
+          if (action !== "join_room" || session.runtimeReady) setStatus("");
+          maybeStartRequestedJoin();
         },
         "error-callback": function() {
           if (generation !== humanVerification.generation) return;
@@ -377,6 +414,38 @@
     var token = humanVerification.token;
     humanVerification.token = null;
     return token;
+  }
+
+  function maybeStartRequestedJoin() {
+    if (!session.joinRequested || humanVerification.busy) return;
+    var invite = session.pendingInvite;
+    if (!invite) {
+      session.joinRequested = false;
+      setStatus("That invite is no longer available.", "error");
+      return;
+    }
+    if (!session.runtimeReady) {
+      setStatus("Halo is still loading. Your game will join automatically when it is ready.");
+      return;
+    }
+    if (!turnstileReady("join_room")) {
+      setStatus("Finishing human verification…");
+      renderTurnstile("join_room", humanVerification.state === "error");
+      return;
+    }
+    try {
+      readPlayerProfile();
+      session.joinRequested = false;
+      join(invite, consumeTurnstile("join_room")).catch(fail);
+    } catch (error) {
+      session.joinRequested = false;
+      setStatus(error.message, "error");
+    }
+  }
+
+  function requestJoinFromProfile() {
+    session.joinRequested = true;
+    maybeStartRequestedJoin();
   }
 
   function showDialog() {
@@ -784,6 +853,7 @@
   }
 
   function showSetup() {
+    session.joinRequested = false;
     if (elements.dialog) elements.dialog.dataset.view = "setup";
     if (elements.wizardSteps) elements.wizardSteps.hidden = false;
     elements.setup.hidden = false;
@@ -1684,6 +1754,7 @@
     session.hostSettings = null;
     session.guestWasJoined = false;
     session.pendingInvite = null;
+    session.joinRequested = false;
     session.wizardStep = "map";
     syncTelemetryContext();
     renderRoster();
@@ -1804,9 +1875,13 @@
       else if (!session.active) showSetup();
       else showProgress();
     });
-    elements.close.addEventListener("click", function() { elements.dialog.close(); });
+    elements.close.addEventListener("click", function() {
+      session.joinRequested = false;
+      elements.dialog.close();
+    });
     elements.dialog.addEventListener("cancel", function(event) {
       event.preventDefault();
+      session.joinRequested = false;
       elements.dialog.close();
     });
     elements.hostForm.addEventListener("submit", function(event) {
@@ -1856,22 +1931,7 @@
     });
     if (elements.joinProfile) {
       elements.joinProfile.addEventListener("click", function() {
-        var invite = session.pendingInvite;
-        if (!invite) {
-          setStatus("That invite is no longer available.", "error");
-          return;
-        }
-        try {
-          readPlayerProfile();
-        } catch (error) {
-          setStatus(error.message, "error");
-          return;
-        }
-        try {
-          join(invite, consumeTurnstile("join_room")).catch(fail);
-        } catch (error) {
-          setStatus(error.message, "error");
-        }
+        requestJoinFromProfile();
       });
     }
     if (elements.verificationRetry) {
@@ -1919,6 +1979,7 @@
     attachEvents();
     renderRoster();
     setBusy(false);
+    startPresencePolling();
     session.pendingInvite = takeInviteFromLocation();
     if (session.pendingInvite) {
       showDialog();
@@ -1938,6 +1999,7 @@
       }
       if (session.pendingInvite) {
         showJoinConfirmation(session.pendingInvite);
+        maybeStartRequestedJoin();
       }
     },
     host: host,

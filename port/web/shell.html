@@ -638,6 +638,25 @@
       letter-spacing: .1em;
       text-transform: uppercase;
     }
+    .live-player-count {
+      display: inline-flex;
+      align-items: center;
+      gap: .32rem;
+      width: fit-content;
+      color: rgba(151, 194, 218, .66);
+      font: 600 .56rem/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: .055em;
+      text-transform: uppercase;
+    }
+    .live-player-count::before {
+      width: .34rem;
+      height: .34rem;
+      border-radius: 50%;
+      background: rgba(88, 201, 153, .72);
+      box-shadow: 0 0 .45rem rgba(88, 201, 153, .36);
+      content: "";
+    }
     #online {
       width: 100%;
       min-height: 2.55rem;
@@ -1401,6 +1420,7 @@
       <div class="sidebar-launch">
         <span class="sidebar-kicker">Online multiplayer</span>
         <button id="online" type="button" data-state="offline">Play online</button>
+        <output id="live-player-count" class="live-player-count" aria-label="Live multiplayer player count" hidden></output>
       </div>
       <section id="player-session" class="sidebar-roster" aria-labelledby="player-sidebar-title">
         <div class="player-sidebar-heading">

@@ -34,6 +34,7 @@ import { enforceTurnBandwidthCaps, turnIsDisabled, turnUsageSummary } from "./tu
 import { requireHumanVerification } from "./turnstile";
 
 export { SignalingRoom } from "./room";
+export { PlayerPresence } from "./presence";
 export type {
   ClientMessage,
   CreateRoomResponse,
@@ -648,11 +649,15 @@ async function route(request: Request, env: RuntimeEnv): Promise<Response> {
   }
 
   const origin = allowedOrigin(request, env);
+  if (request.method === "GET" && url.pathname === "/v1/presence") {
+    const players = await env.PRESENCE.getByName("global").count(Date.now());
+    return withCors(jsonResponse({ players, v: SIGNALING_PROTOCOL_VERSION }), origin);
+  }
   if (request.method === "OPTIONS") {
     const response = new Response(null, {
       headers: {
         "Access-Control-Allow-Headers": "Content-Type",
-        "Access-Control-Allow-Methods": "POST, DELETE, OPTIONS",
+        "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
         "Access-Control-Max-Age": "86400",
       },
       status: 204,

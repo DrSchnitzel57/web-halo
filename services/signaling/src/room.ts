@@ -405,6 +405,7 @@ export class SignalingRoom extends DurableObject<Env> {
       `role:${attachment.role}`,
     ]);
     server.serializeAttachment(attachment);
+    this.updatePresence(room.room_id, attachment.peerId, true);
     server.send(
       jsonMessage({
         peers: existingConnections
@@ -515,6 +516,10 @@ export class SignalingRoom extends DurableObject<Env> {
 
     const message = parsed.value;
     if (message.type === "ping") {
+      const room = this.getRoom();
+      if (room !== null) {
+        this.updatePresence(room.room_id, sender.peerId, true);
+      }
       try {
         socket.send(
           jsonMessage({
@@ -634,6 +639,10 @@ export class SignalingRoom extends DurableObject<Env> {
       return;
     }
     attachment.departed = true;
+    const room = this.getRoom();
+    if (room !== null) {
+      this.updatePresence(room.room_id, attachment.peerId, false);
+    }
     try {
       socket.serializeAttachment(attachment);
     } catch {
@@ -765,6 +774,12 @@ export class SignalingRoom extends DurableObject<Env> {
   }
 
   private async expireRoom(): Promise<void> {
+    const room = this.getRoom();
+    if (room !== null) {
+      for (const { attachment } of this.connections()) {
+        this.updatePresence(room.room_id, attachment.peerId, false);
+      }
+    }
     for (const socket of this.ctx.getWebSockets()) {
       try {
         socket.close(4001, "Room expired.");
@@ -773,6 +788,26 @@ export class SignalingRoom extends DurableObject<Env> {
       }
     }
     await this.ctx.storage.deleteAll();
+  }
+
+  private updatePresence(
+    roomId: string,
+    peerId: string,
+    connected: boolean,
+  ): void {
+    const connectionKey = `${roomId}:${peerId}`;
+    const presence = this.env.PRESENCE.getByName("global");
+    const operation = connected
+      ? presence.connected(connectionKey, Date.now())
+      : presence.disconnected(connectionKey);
+    this.ctx.waitUntil(operation.catch((error: unknown) => {
+      console.error(
+        JSON.stringify({
+          error: error instanceof Error ? error.message : String(error),
+          message: "failed to update global player presence",
+        }),
+      );
+    }));
   }
 
   private getRoom(): RoomRow | null {

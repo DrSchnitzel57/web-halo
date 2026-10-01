@@ -41,6 +41,10 @@
       {
         "name": "ROOMS",
         "class_name": "SignalingRoom"
+      },
+      {
+        "name": "PRESENCE",
+        "class_name": "PlayerPresence"
       }
     ]
   },
@@ -74,6 +78,10 @@
     {
       "tag": "v1",
       "new_sqlite_classes": ["SignalingRoom"]
+    },
+    {
+      "tag": "v2",
+      "new_sqlite_classes": ["PlayerPresence"]
     }
   ],
   "observability": {

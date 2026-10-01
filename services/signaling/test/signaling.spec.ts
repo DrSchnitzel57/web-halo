@@ -149,7 +149,35 @@ async function connectSession(
   return { socket, welcome: await welcomePromise };
 }
 
+async function livePlayerCount(): Promise<number> {
+  const response = await exports.default.fetch(
+    new Request(`${API_ORIGIN}/v1/presence`, {
+      headers: { Origin: GAME_ORIGIN },
+    }),
+  );
+  expect(response.status).toBe(200);
+  expect(response.headers.get("Access-Control-Allow-Origin")).toBe(GAME_ORIGIN);
+  const body = await response.json<{ players: number }>();
+  return body.players;
+}
+
 describe("signaling API", () => {
+  it("reports an anonymous live count for connected multiplayer players", async () => {
+    expect(await livePlayerCount()).toBe(0);
+
+    const room = await createRoom("001122334455", 3);
+    const host = await connectSession(room.host.session.websocketUrl);
+    expect(await livePlayerCount()).toBe(1);
+
+    const guestResponse = await createGuestSession(room);
+    const guestBody = await guestResponse.json<CreateSessionResponse>();
+    const guest = await connectSession(guestBody.session.websocketUrl);
+    expect(await livePlayerCount()).toBe(2);
+
+    guest.socket.close(1000, "test complete");
+    host.socket.close(1000, "test complete");
+  });
+
   it("creates a capability-protected room and STUN-only host session", async () => {
     const body = await createRoom();
 
