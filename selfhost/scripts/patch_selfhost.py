@@ -39,10 +39,48 @@ def edit(path: Path, pattern: str, replacement: str, *, regex: bool = False, lab
     if count != 1:
         raise PatchError(
             f"{label}: expected exactly 1 match in {path}, found {count}. "
-            "Upstream probably changed; pin HALO_REF to the tested commit."
+            "Upstream probably changed: build the #selfhost-v1 version, or ask for an updated patch."
         )
     path.write_text(updated, encoding="utf-8")
     print(f"patched: {label}")
+
+
+MAP_LOADING_NAME_DEFINITION = r"""
+#ifdef HALO_WEB
+/* Self-host build: the browser platform layer asks which map is loading
+(port/web/src/web_platform.c, for the loading screen and its telemetry).
+Upstream's definition of this function is not in the public repository.
+It answers with the cache name of the map being copied in, e.g. "a10". */
+const char *game_map_loading_name(
+	void)
+{
+	if (cache_file_globals.copying_to_map_file_index != NONE &&
+		cache_file_globals.copying_to_map_file_name[0])
+	{
+		return cache_file_globals.copying_to_map_file_name;
+	}
+
+	return "";
+}
+#endif
+"""
+
+
+def define_missing_map_loading_name(root: Path) -> None:
+    definition = re.compile(r"\bgame_map_loading_name\s*\(\s*void\s*\)\s*\{")
+    for source in [*root.glob("source/**/*.c"), *root.glob("port/**/*.c")]:
+        if definition.search(source.read_text(encoding="utf-8", errors="replace")):
+            print(f"skipped: game_map_loading_name is already defined in {source.relative_to(root)}")
+            return
+    target = root / "source/cache/cache_files_windows.c"
+    text = target.read_text(encoding="utf-8")
+    if "static struct cache_file_runtime_globals cache_file_globals;" not in text:
+        raise PatchError(
+            f"game_map_loading_name: cache_file_globals not found in {target}. "
+            "Upstream probably changed: build the #selfhost-v1 version, or ask for an updated patch."
+        )
+    target.write_text(text.rstrip("\n") + "\n" + MAP_LOADING_NAME_DEFINITION, encoding="utf-8")
+    print("patched: define missing game_map_loading_name()")
 
 
 def main(root: Path) -> None:
@@ -86,6 +124,13 @@ def main(root: Path) -> None:
     )
     edit(wrangler, r'\s*"analytics_engine_datasets":\s*\[[^\]]*\],', "",
          regex=True, label="signaling: no Analytics Engine binding")
+
+    # 4. Missing upstream function. port/web/src/web_platform.c (since commit
+    #    434581c, "Instrument web startup and map loading") calls
+    #    game_map_loading_name(), but its definition was never committed, so
+    #    the public repository fails to link. Supply one, unless upstream adds
+    #    its own later.
+    define_missing_map_loading_name(root)
 
     # The build expects this folder (the site's images are not in the repo).
     (root / "port/web/assets/ui").mkdir(parents=True, exist_ok=True)
