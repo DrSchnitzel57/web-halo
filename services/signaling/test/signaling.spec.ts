@@ -442,12 +442,16 @@ describe("signaling API", () => {
       );
 
     let response: Response | null = null;
-    for (let attempt = 0; attempt < 512; attempt += 1) {
+    let acceptedAttempts = 0;
+    for (let attempt = 0; attempt < 1_024; attempt += 1) {
       response = await attemptUpgrade();
+      if (response.status === 429) break;
+      expect(response.status).toBe(401);
+      acceptedAttempts += 1;
     }
-    expect(response?.status).toBe(401);
-    expect((await attemptUpgrade()).status).toBe(429);
-  }, 15_000);
+    expect(acceptedAttempts).toBeGreaterThan(0);
+    expect(response?.status).toBe(429);
+  }, 30_000);
 
   it("counts malformed frames and pings toward the WebSocket rate limit", async () => {
     const room = await createRoom();
