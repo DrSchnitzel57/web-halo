@@ -46,6 +46,8 @@ const presentationGate = shell.match(
 assert(presentationGate, 'missing first-presentation gate');
 assert.match(presentationGate[0], /_platform_web_profile_loops/);
 assert.match(presentationGate[0], /_platform_web_profile_swaps/);
+assert.match(presentationGate[0], /!runtimeInitialized/,
+  'the presentation gate must not call WebAssembly exports before runtime initialization');
 assert.match(presentationGate[0], /completedLoops >= 4/);
 assert.match(presentationGate[0], /submittedFrames >= 2/);
 assert.match(shell, /function revealPresentedGame\(token\)[\s\S]*token !== presentationWaitToken/);
@@ -153,6 +155,9 @@ assert.match(shell,
 assert.match(shell,
   /function sendRuntimeTelemetry\([\s\S]*?\/v1\/telemetry\/runtime[\s\S]*?function updateRuntimeTelemetry\([\s\S]*?map_load_stalled/,
   'startup, online and map-load milestones must reach runtime telemetry');
+assert.match(shell,
+  /let runtimeInitialized = false;[\s\S]*?function moduleMetric\([\s\S]*?if \(!runtimeInitialized\) return fallback;[\s\S]*?onRuntimeInitialized\(\) \{\s*runtimeInitialized = true;/,
+  'slow hosts must not call native telemetry exports before WebAssembly initialization');
 assert.match(worker, /RUNTIME_ROUTE = "\/v1\/telemetry\/runtime"[\s\S]*?RUNTIME_TELEMETRY/,
   'the Worker must accept runtime telemetry');
 assert.match(wrangler, /"binding": "RUNTIME_TELEMETRY"[\s\S]*?"dataset": "halo_web_runtime"/,
