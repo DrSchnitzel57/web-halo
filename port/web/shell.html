@@ -204,6 +204,14 @@
       background: rgba(115, 155, 134, .1);
       font-size: .76rem;
     }
+    .control-button:hover,
+    .control-button:active,
+    .control-button:focus-visible,
+    .game-settings-menu[open] > summary {
+      color: #edf8ff;
+      border-color: rgba(91, 184, 255, .62);
+      background: rgba(20, 119, 190, .32);
+    }
     .control-button svg { width: 1rem; height: 1rem; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.7; }
     #mute.is-muted .sound-wave,
     #mute:not(.is-muted) .mute-mark { display: none; }
@@ -1470,7 +1478,7 @@
             </summary>
             <div class="game-settings-panel">
               <label class="game-settings-option"><input id="disable-player-magnetism" type="checkbox"> Disable aim magnetism</label>
-              <p>Turns off the subtle aiming pull toward nearby players. Your choice is saved on this device.</p>
+              <p id="player-magnetism-note">Automatically off for keyboard and mouse, and on for a controller.</p>
             </div>
           </details>
         </div>
@@ -1777,6 +1785,7 @@
     const onlineDialog = document.getElementById("online-dialog");
     const gameSettingsMenu = document.getElementById("game-settings-menu");
     const disablePlayerMagnetism = document.getElementById("disable-player-magnetism");
+    const playerMagnetismNote = document.getElementById("player-magnetism-note");
     const GAME_SETTINGS_STORAGE_KEY = "halo.web.game-settings.v1";
     let audioMuted = true;
     let performancePrevious = null;
@@ -1808,6 +1817,8 @@
     let audioTelemetryPreviousLateCallbacks = 0;
     let connectedControllerCount = 0;
     let gamepadDiscoveryFailed = false;
+    let playerMagnetismManual = false;
+    let playerInputMode = "keyboard-mouse";
     const runtimeMapNames = [
       "a10", "a30", "a50", "b30", "b40", "c10", "c20", "c40", "d20", "d40",
       "beavercreek", "bloodgulch", "boardingaction", "carousel", "chillout", "damnation",
@@ -2323,14 +2334,6 @@
 
     function applyPlayerMagnetism() {
       const enabled = !disablePlayerMagnetism.checked;
-      try {
-        localStorage.setItem(GAME_SETTINGS_STORAGE_KEY, JSON.stringify({
-          disablePlayerMagnetism: !enabled,
-        }));
-      } catch (error) {
-        // Storage can be unavailable in strict private browsing; the setting
-        // still applies for this page load.
-      }
       if (typeof Module !== "undefined" &&
           typeof Module._platform_web_set_player_magnetism_enabled === "function") {
         Module._platform_web_set_player_magnetism_enabled(enabled ? 1 : 0);
@@ -2339,11 +2342,47 @@
 
     try {
       const savedGameSettings = JSON.parse(localStorage.getItem(GAME_SETTINGS_STORAGE_KEY));
-      disablePlayerMagnetism.checked = !!(savedGameSettings && savedGameSettings.disablePlayerMagnetism);
+      // Settings saved by the earlier on/off UI necessarily came from a
+      // player click, so treat them as manual even without the newer marker.
+      playerMagnetismManual = !!(savedGameSettings &&
+        Object.prototype.hasOwnProperty.call(savedGameSettings, "disablePlayerMagnetism"));
+      disablePlayerMagnetism.checked = playerMagnetismManual ?
+        !!savedGameSettings.disablePlayerMagnetism : true;
     } catch (error) {
-      disablePlayerMagnetism.checked = false;
+      playerMagnetismManual = false;
+      disablePlayerMagnetism.checked = true;
     }
-    disablePlayerMagnetism.addEventListener("change", applyPlayerMagnetism);
+    function updatePlayerMagnetismNote() {
+      if (playerMagnetismManual) {
+        playerMagnetismNote.textContent = "Manual preference saved on this device. Automatic input switching is off.";
+      } else {
+        playerMagnetismNote.textContent = playerInputMode === "controller" ?
+          "Controller active · aim magnetism is on." :
+          "Keyboard and mouse active · aim magnetism is off.";
+      }
+    }
+    function setAutomaticInputMode(mode) {
+      if (playerMagnetismManual || mode === playerInputMode) return;
+      playerInputMode = mode;
+      disablePlayerMagnetism.checked = mode !== "controller";
+      updatePlayerMagnetismNote();
+      applyPlayerMagnetism();
+    }
+    updatePlayerMagnetismNote();
+    disablePlayerMagnetism.addEventListener("change", () => {
+      playerMagnetismManual = true;
+      try {
+        localStorage.setItem(GAME_SETTINGS_STORAGE_KEY, JSON.stringify({
+          disablePlayerMagnetism: disablePlayerMagnetism.checked,
+          playerMagnetismManual: true,
+        }));
+      } catch (error) {
+        // Storage can be unavailable in strict private browsing; the manual
+        // preference still remains fixed for this page load.
+      }
+      updatePlayerMagnetismNote();
+      applyPlayerMagnetism();
+    });
     ["keydown", "keyup", "keypress"].forEach(type => {
       gameSettingsMenu.addEventListener(type, event => event.stopPropagation());
     });
@@ -2504,11 +2543,17 @@
       }
       if (!pads.length) {
         controllerSummary = "";
+        if (playerInputMode === "controller") setAutomaticInputMode("keyboard-mouse");
       } else if (pads.length === 1) {
         const name = pads[0].id ? pads[0].id.split("(")[0].trim() : "Controller";
         controllerSummary = `${name || "Controller"} ready · Player 1`;
       } else {
         controllerSummary = `${Math.min(pads.length, 4)} controllers detected`;
+      }
+      if (pads.some(gamepad =>
+        Array.from(gamepad.buttons || []).some(button => button && (button.pressed || button.value > .5)) ||
+        Array.from(gamepad.axes || []).some(axis => Math.abs(axis) > .35))) {
+        setAutomaticInputMode("controller");
       }
       updatePointerLockUi();
     }
@@ -2608,8 +2653,14 @@
       secretClickTimer = window.setTimeout(() => { secretClickCount = 0; }, 700);
     });
     canvas.addEventListener("pointerdown", () => {
+      setAutomaticInputMode("keyboard-mouse");
       focusCanvas();
       if (!audioMuted) resumeBrowserAudio();
+    });
+    canvas.addEventListener("mousemove", event => {
+      if (document.pointerLockElement === canvas && (event.movementX || event.movementY)) {
+        setAutomaticInputMode("keyboard-mouse");
+      }
     });
 
     function webUiOwnsKeyboardFocus() {
@@ -2621,6 +2672,9 @@
 
     document.addEventListener("keydown", event => {
       const gameOwnsKeyboard = document.pointerLockElement === canvas || document.activeElement === canvas;
+      if (gameOwnsKeyboard && !webUiOwnsKeyboardFocus()) {
+        setAutomaticInputMode("keyboard-mouse");
+      }
       if (event.key === "Tab" && gameOwnsKeyboard && !webUiOwnsKeyboardFocus()) {
         // Keep Tab available to SDL/Halo (weapon switch) while suppressing the
         // browser's default focus traversal. Do not stop propagation here.
@@ -2685,10 +2739,13 @@
       fullscreenButton.setAttribute("aria-label", expanded ? "Exit fullscreen" : "Enter fullscreen");
       fullscreenButton.title = expanded ? "Exit fullscreen" : "Fullscreen";
     });
-    window.addEventListener("gamepadconnected", refreshControllerStatus);
+    window.addEventListener("gamepadconnected", event => {
+      setAutomaticInputMode("controller");
+      refreshControllerStatus(event);
+    });
     window.addEventListener("gamepaddisconnected", refreshControllerStatus);
     window.addEventListener("focus", refreshControllerStatus);
-    window.setInterval(refreshControllerStatus, 1000);
+    window.setInterval(refreshControllerStatus, 250);
     document.getElementById("player-sidebar-toggle").addEventListener("click", event => {
       const sidebar = document.getElementById("player-sidebar");
       const collapsed = sidebar.dataset.collapsed !== "true";
