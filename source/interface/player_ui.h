@@ -89,6 +89,17 @@ void player_ui_fast_setup_network_server(
 boolean player_ui_configure_network_server_game(
 	long multiplayer_level_index,
 	long game_mode_index);
+boolean player_ui_configure_network_server_game_advanced(
+	long multiplayer_level_index,
+	long game_mode_index,
+	long score_to_win,
+	long respawn_seconds,
+	long lives,
+	long health_percent,
+	boolean infinite_grenades,
+	boolean shields,
+	boolean invisible_players,
+	boolean other_players_on_radar);
 boolean player_ui_edit_profile_is_default_profile(
 	void);
 void player_ui_remember_player1_profile(

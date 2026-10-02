@@ -84,6 +84,15 @@ enum
 /* JavaScript-facing, atomic-only API. */
 int platform_web_online_request(int command);
 int platform_web_online_host_configured(int map_index, int mode_index);
+int platform_web_online_host_advanced_configured(
+	int map_index,
+	int mode_index,
+	int score_to_win,
+	int respawn_seconds,
+	int lives,
+	int health_percent,
+	int rules);
+void platform_web_set_player_magnetism_enabled(int enabled);
 int platform_web_online_set_player_customization(
 	int color_index,
 	int name0,

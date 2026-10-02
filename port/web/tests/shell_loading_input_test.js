@@ -56,6 +56,8 @@ const controls = shell.match(/<div class="game-controls"[\s\S]*?<\/div>/);
 assert(controls, 'missing game controls');
 assert.match(controls[0], /id="focus"/,
   'Focus game must be a visible control next to mute/fullscreen');
+assert.match(controls[0], /id="game-settings-menu"[\s\S]*id="disable-player-magnetism"/,
+  'the below-game settings menu must expose the aim-magnetism switch');
 assert.doesNotMatch(controls[0], /id="focus"[^>]* hidden/);
 assert.match(shell,
   /<section id="game-frame"[\s\S]*?<canvas[\s\S]*?<footer>[\s\S]*?<div class="game-controls"/,
@@ -98,6 +100,27 @@ assert.doesNotMatch(tabBranch[0], /stopPropagation/,
   'Tab must continue propagating to SDL so it can switch weapons');
 assert.match(shell, /!diagnosticsOverlay\.hidden \|\| onlineDialog\.open/,
   'web dialogs must retain accessible Tab navigation');
+assert.match(shell,
+  /platform_web_set_player_magnetism_enabled[\s\S]*enabled \? 1 : 0/,
+  'the game setting must change Halo player_magnetism_flag through a native export');
+assert.match(shell,
+  /playerMagnetismManual = false[\s\S]*playerInputMode = "keyboard-mouse"[\s\S]*disablePlayerMagnetism\.checked = playerMagnetismManual \?[\s\S]*: true/,
+  'keyboard and mouse must default to disabled magnetism unless a manual preference exists');
+assert.match(shell,
+  /function setAutomaticInputMode\(mode\)[\s\S]*playerMagnetismManual \|\| mode === playerInputMode[\s\S]*mode !== "controller"[\s\S]*applyPlayerMagnetism\(\)/,
+  'automatic input switching must enable magnetism for controllers without overriding manual choices');
+assert.match(shell,
+  /Array\.from\(gamepad\.buttons \|\| \[\]\)\.some[\s\S]*Array\.from\(gamepad\.axes \|\| \[\]\)\.some[\s\S]*setAutomaticInputMode\("controller"\)/,
+  'real gamepad activity must select the controller magnetism default');
+assert.match(shell,
+  /\.control-button:hover,[\s\S]*?\.control-button:active,[\s\S]*?\.game-settings-menu\[open\] > summary[\s\S]*?background: rgba\(20, 119, 190, \.32\)/,
+  'game controls must share the same hover, pressed, and open visual state');
+assert.match(shell,
+  /canvas\.addEventListener\("pointerdown"[\s\S]*setAutomaticInputMode\("keyboard-mouse"\)[\s\S]*document\.addEventListener\("keydown"[\s\S]*setAutomaticInputMode\("keyboard-mouse"\)/,
+  'keyboard and mouse activity must restore the non-magnetized automatic default');
+assert.match(shell,
+  /document\.addEventListener\("pointerdown"[\s\S]*?gameSettingsMenu\.open[\s\S]*?!gameSettingsMenu\.contains\(event\.target\)[\s\S]*?removeAttribute\("open"\)/,
+  'clicking outside the game-settings popover must dismiss it');
 
 const connectedGamepads = xinput.match(
   /static DWORD connected_gamepads\(void\)[\s\S]*?\n\}/);
@@ -118,7 +141,7 @@ assert.match(shell,
   /function connectedGamepads\(\)[\s\S]*?try[\s\S]*?navigator\.getGamepads\(\) \|\| \[\][\s\S]*?catch[\s\S]*?function refreshControllerStatus\(\)[\s\S]*?Player 1[\s\S]*?controllers detected/,
   'controller discovery must be guarded and continuously report connected controllers');
 assert.match(shell,
-  /gamepadconnected", refreshControllerStatus[\s\S]*?gamepaddisconnected", refreshControllerStatus/,
+  /gamepadconnected", event => \{[\s\S]*?setAutomaticInputMode\("controller"\)[\s\S]*?refreshControllerStatus\(event\)[\s\S]*?gamepaddisconnected", refreshControllerStatus/,
   'controller status must update for hot-plug and disconnect events');
 assert.match(shell,
   /controllerSummary[\s\S]*?mouse capture optional/,
